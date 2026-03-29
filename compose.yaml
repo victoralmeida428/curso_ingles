@@ -1,0 +1,9 @@
+services:
+  bot:
+    build: .
+    container_name: bot_professor_ingles
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
