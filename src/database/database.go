@@ -15,6 +15,9 @@ type UserData struct {
 	Lang  string
 	Tipo  string
 	Nivel string
+	StripeCustomerID string // Novo
+    IsSubscribed     bool   // Novo
+    ExpiresAt        int64  // Timestamp de expiração
 }
 
 // Variáveis globais privadas do pacote

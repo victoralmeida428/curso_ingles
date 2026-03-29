@@ -7,7 +7,9 @@ import (
 
 // BuildGlobalSystemPrompt constrói a instrução principal da IA com os dados do usuário
 func BuildGlobalSystemPrompt(user database.UserData) string {
-	basePrompt := "Você é um professor de inglês nativo e experiente. Responda sempre em inglês."
+	basePrompt := fmt.Sprintf(`Você é um professor de %s nativo e experiente. Responda sempre em %s.
+	 se o nível não for informado, pergunte qual é o nível do aluno.
+	 se o tipo não for informado, pergunte qual é o tipo de vocabulário do aluno.`, user.Lang, user.Lang)
 
 	userContext := fmt.Sprintf(
 		"Contexto do Aluno:\n- Idioma: %s\n- Tipo de vocabulário: %s\n- Nível de fluência: %s",
