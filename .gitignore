@@ -1,0 +1,5 @@
+*.ogg
+*.txt
+bin/
+.env
+*.sqlite
