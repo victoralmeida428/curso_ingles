@@ -11,8 +11,10 @@ import (
 	"os/signal"
 	"strings"
 
+	"curso/src/config"
 	"curso/src/database"
 	"curso/src/openrouter"
+	"curso/src/payment"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -55,6 +57,7 @@ func (w *Worker) StartWorker() {
 		{Command: "tipo", Description: "Define o vocabulário"},
 		{Command: "nivel", Description: "Define seu nível atual"},
 		{Command: "nivelar", Description: "Faz um teste guiado para descobrir o seu nível de inglês"},
+		{Command: "assinar", Description: "Assina o Zellang"},
 	}
 
 	if _, err := w.bot.SetMyCommands(ctx, &bot.SetMyCommandsParams{Commands: comandos}); err != nil {
@@ -75,16 +78,40 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 	chatID := update.Message.Chat.ID
 	msgText := update.Message.Text
 	user := database.GetUser(chatID)
+	if user.ID == 0 {
+		_ = database.SaveUser(user)
+	}
 
 	rawMsg := &RawTelegramMessage{
 		ChatID: chatID,
+	}
+
+	if !user.IsSubscribed() && !strings.HasPrefix(msgText, "/assinar") {
+		rawMsg.Text = "Você não é assinante. Use /assinar para assinar."
+		sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
+		return
 	}
 
 	if isText {
 		switch {
 		case strings.HasPrefix(msgText, "/start"):
 			rawMsg.Text = "Olá! Use:\n/lang [idioma]\n/tipo [formal/informal/tecnico]\n/nivel [iniciante/intermediario/avancado]\n/nivelar para fazer um teste de nivelamento"
-			_ = database.SaveUser(user)
+			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
+			return
+		case strings.HasPrefix(msgText, "/assinar"):
+			cfg := config.LoadConfig()
+			// Gerar links para os 3 planos
+			linkMensal, _ := payment.CreateCheckoutSession(chatID, cfg.PriceMonthlyID, cfg)
+			linkSemestral, _ := payment.CreateCheckoutSession(chatID, cfg.PriceSemiannualID, cfg)
+			linkAnual, _ := payment.CreateCheckoutSession(chatID, cfg.PriceAnnualID, cfg)
+
+			rawMsg.Text = fmt.Sprintf(
+				"💎 <b>Escolha seu plano Zellang:</b>\n\n"+
+					"• <b>Mensal:</b> R$ 10,00\n<a href='%s'>👉 Assinar Mensal</a>\n\n"+
+					"• <b>Semestral:</b> R$ 55,00 (Economia de R$ 5)\n<a href='%s'>👉 Assinar Semestral</a>\n\n"+
+					"• <b>Anual:</b> R$ 100,00 (Melhor preço! R$ 8,33/mês)\n<a href='%s'>👉 Assinar Anual</a>",
+				linkMensal, linkSemestral, linkAnual,
+			)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
 		case strings.HasPrefix(msgText, "/lang "):

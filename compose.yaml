@@ -2,6 +2,8 @@ services:
   bot:
     build: .
     container_name: bot_professor_ingles
+    ports:
+      - "8080:8080"
     restart: unless-stopped
     volumes:
       - ./data:/app/data

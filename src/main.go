@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 
 	"curso/src/config"
 	"curso/src/database"
 	"curso/src/openrouter"
+	"curso/src/payment"
 	"curso/src/telegram"
 
 	"github.com/joho/godotenv"
@@ -45,6 +47,20 @@ func main() {
 
 	// Como o banco agora é um Singleton gerenciado pelo próprio pacote 'database',
 	// só precisamos passar o token para o bot.
-	w := telegram.NewWorker(cfg.TelegramBotToken, db, client)
-	w.StartWorker()
+	go func() {
+		w := telegram.NewWorker(cfg.TelegramBotToken, db, client)
+		w.StartWorker()
+	}()
+
+	// 5. Inicia o Webhook do Stripe
+	if cfg.StripeSecretKey == "" || cfg.StripeWebhookSecret == "" {
+		log.Fatal("❌ Chaves do Stripe não encontradas. Verifique seu arquivo .env.")
+	}
+
+	fmt.Println("\n==================================================")
+	fmt.Println(" 💳 INICIANDO WEBHOOK DO STRIPE ")
+	fmt.Println("==================================================")
+
+	http.HandleFunc("/webhook", payment.HandleWebhook(cfg))
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
