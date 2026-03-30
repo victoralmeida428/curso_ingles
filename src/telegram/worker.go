@@ -152,7 +152,9 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
 		case msgText == "/perfil":
-			rawMsg.Text = fmt.Sprintf("👤 <b>Seu Perfil:</b>\nIdioma: %s\nTipo: %s\nNível: %s", fallback(user.Lang), fallback(user.Tipo), fallback(user.Nivel))
+			usoAudio := fmt.Sprintf("%d/%d", user.DailyAudioCount, MaxDailyAudios)
+			rawMsg.Text = fmt.Sprintf("👤 <b>Seu Perfil:</b>\nIdioma: %s\nNível: %s\n\n🎙 <b>Uso de Voz hoje:</b> %s",
+				fallback(user.Lang), fallback(user.Nivel), usoAudio)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
 		case strings.HasPrefix(msgText, "/nivelar"):

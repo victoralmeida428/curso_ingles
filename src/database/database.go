@@ -12,11 +12,13 @@ import (
 
 // UserData representa as preferências de estudo do usuário
 type UserData struct {
-	ID        int64
-	Lang      string
-	Tipo      string
-	Nivel     string
-	ExpiresAt int64 // Timestamp de expiração
+	ID              int64
+	Lang            string
+	Tipo            string
+	Nivel           string
+	ExpiresAt       int64 // Timestamp de expiração
+	DailyAudioCount int   // Novo: Contador de áudios hoje
+	LastAudioReset  int64 // Novo: Timestamp do último reset (meia-noite)
 }
 
 func (u *UserData) IsSubscribed() bool {
@@ -46,7 +48,9 @@ func GetDB(dbPath string) (*sql.DB, error) {
 			lang TEXT DEFAULT '',
 			tipo TEXT DEFAULT '',
 			nivel TEXT DEFAULT '',
-			expires_at INTEGER DEFAULT 0
+			expires_at INTEGER DEFAULT 0,
+			daily_audio_count INTEGER DEFAULT 0,
+			last_audio_reset INTEGER DEFAULT 0
 		);`
 
 		if _, err := db.Exec(query); err != nil {
@@ -57,6 +61,19 @@ func GetDB(dbPath string) (*sql.DB, error) {
 
 	// Retorna a instância global que foi (ou já havia sido) configurada pelo once.Do
 	return db, dbErr
+}
+
+func IncrementAudioUsage(chatID int64) error {
+	now := time.Now()
+	beginningOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix()
+
+	// Se o último reset foi antes de hoje, zeramos o contador
+	_, err := db.Exec(`
+		UPDATE users 
+		SET daily_audio_count = CASE WHEN last_audio_reset < ? THEN 1 ELSE daily_audio_count + 1 END,
+		    last_audio_reset = ?
+		WHERE id = ?`, beginningOfDay, now.Unix(), chatID)
+	return err
 }
 
 // SaveUser atualiza ou insere as preferências do usuário de forma segura
@@ -94,10 +111,10 @@ func UpdateSubscription(chatID int64, days int) error {
 // GetUser busca as informações do usuário. Retorna os dados vazios se ele não existir ainda.
 func GetUser(id int64) UserData {
 	user := UserData{ID: id}
-	query := `SELECT lang, tipo, nivel, expires_at FROM users WHERE id = ?`
+	query := `SELECT lang, tipo, nivel, expires_at, daily_audio_count, last_audio_reset FROM users WHERE id = ?`
 
 	// Utiliza o 'db' global diretamente
-	err := db.QueryRow(query, id).Scan(&user.Lang, &user.Tipo, &user.Nivel, &user.ExpiresAt)
+	err := db.QueryRow(query, id).Scan(&user.Lang, &user.Tipo, &user.Nivel, &user.ExpiresAt, &user.DailyAudioCount, &user.LastAudioReset)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("Erro ao buscar usuário %d no banco: %v\n", id, err)
 	}

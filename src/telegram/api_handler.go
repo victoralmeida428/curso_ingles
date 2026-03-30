@@ -16,6 +16,8 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
+const MaxDailyAudios = 20
+
 // processIncomingMessage gerencia a conversa com a IA e popula o rawMsg com a resposta.
 func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, client openrouter.IClient, user database.UserData, b *bot.Bot, cache *HistoryCache) (err error) {
 	msgInfo, err := ClassifyMessage(rawMsg)
@@ -78,6 +80,11 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 		// pois a mensagem atual já foi injetada no final do array 'historico' pelo cache.
 
 	case Audio:
+
+		if user.DailyAudioCount >= MaxDailyAudios {
+			rawMsg.Text = "⚠️ Você atingiu seu limite diário de áudios (20/dia). Para continuar praticando agora, use mensagens de texto!"
+			return nil
+		}
 		// Se for áudio, o cache colocou apenas a frase "[O usuário enviou uma mensagem de áudio.]".
 		// Para a requisição atual, a IA precisa ouvir o áudio de verdade.
 		// Então, removemos a última mensagem do array e substituímos pela estrutura multimodal.
