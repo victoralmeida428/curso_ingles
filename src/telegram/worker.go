@@ -86,7 +86,7 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 		ChatID: chatID,
 	}
 
-	if !user.IsSubscribed() && !strings.HasPrefix(msgText, "/assinar") {
+	if !user.IsSubscribed() && !strings.HasPrefix(msgText, "/assinar") && !strings.HasPrefix(msgText, "/start") {
 		rawMsg.Text = "Você não é assinante. Use /assinar para assinar."
 		sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 		return
@@ -95,7 +95,26 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 	if isText {
 		switch {
 		case strings.HasPrefix(msgText, "/start"):
-			rawMsg.Text = "Olá! Use:\n/lang [idioma]\n/tipo [formal/informal/tecnico]\n/nivel [iniciante/intermediario/avancado]\n/nivelar para fazer um teste de nivelamento"
+			rawMsg.Text = `🚀 <b>Bem-vindo ao Zellang!</b> 🤖
+
+				Eu sou seu mentor pessoal de inglês alimentado por Inteligência Artificial. Meu objetivo é ajudar você a alcançar a fluência de forma natural e dinâmica.
+
+				🌟 <b>O que eu posso fazer?</b>
+				• <b>Conversa Real:</b> Pratique inglês via texto ou <b>mensagens de voz</b>. Eu respondo você com áudio de alta fidelidade!
+				• <b>Personalização:</b> Adaptado ao seu idioma nativo, nível de fluência e tipo de vocabulário (formal, técnico ou casual).
+				• <b>Nivelamento:</b> Posso avaliar suas habilidades e definir seu nível CEFR (A1 a C2).
+
+				🛠 <b>Como começar?</b>
+				Primeiro, configure seu perfil para que eu possa ajustar minhas respostas:
+				1. /lang - Defina seu idioma nativo (ex: <code>/lang Português</code>)
+				2. /tipo - Escolha o foco (ex: <code>/tipo técnico</code>)
+				3. /nivel - Defina seu nível (ex: <code>/nivel intermediário</code>)
+				4. /nivelar - Inicie um teste guiado de 4 perguntas.
+
+				👤 <b>Seu Perfil:</b> Use /perfil para ver suas configurações.
+				💎 <b>Assinatura:</b> Use /assinar para liberar acesso total às conversas.
+
+				<i>Diga "Hello" ou envie um áudio para começarmos a praticar!</i>`
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
 		case strings.HasPrefix(msgText, "/assinar"):
