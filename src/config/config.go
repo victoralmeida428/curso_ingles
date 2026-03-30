@@ -13,6 +13,7 @@ type (
 		PriceMonthlyID      string // R$ 10
 		PriceSemiannualID   string // R$ 55
 		PriceAnnualID       string // R$ 100
+		TelegramURL         string
 	}
 )
 
@@ -26,5 +27,6 @@ func LoadConfig() *Config {
 		PriceMonthlyID:      os.Getenv("PRICE_MONTHLY_ID"),
 		PriceSemiannualID:   os.Getenv("PRICE_SEMIANNUAL_ID"),
 		PriceAnnualID:       os.Getenv("PRICE_ANNUAL_ID"),
+		TelegramURL:         os.Getenv("TELEGRAM_URL"),
 	}
 }

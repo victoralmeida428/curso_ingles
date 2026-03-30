@@ -27,6 +27,10 @@ type Worker struct {
 	cache  *HistoryCache
 }
 
+func (w *Worker) GetBot() *bot.Bot {
+	return w.bot
+}
+
 func NewWorker(botToken string, db *sql.DB, client openrouter.IClient) *Worker {
 	cache := NewHistoryCache(30)
 	opts := []bot.Option{

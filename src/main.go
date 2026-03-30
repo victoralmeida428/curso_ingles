@@ -21,6 +21,7 @@ func init() {
 func main() {
 	// 1. Carrega as configurações globais (lê o .env automaticamente)
 	cfg := config.LoadConfig()
+	fmt.Printf("Config: %v\n", cfg)
 
 	// 2. Inicializa o Banco de Dados (Singleton)
 	// Chamamos o GetDB aqui no início para garantir que o arquivo e as tabelas sejam criados
@@ -47,20 +48,21 @@ func main() {
 
 	// Como o banco agora é um Singleton gerenciado pelo próprio pacote 'database',
 	// só precisamos passar o token para o bot.
+	w := telegram.NewWorker(cfg.TelegramBotToken, db, client)
 	go func() {
-		w := telegram.NewWorker(cfg.TelegramBotToken, db, client)
-		w.StartWorker()
+		if cfg.StripeSecretKey == "" || cfg.StripeWebhookSecret == "" {
+			log.Fatal("❌ Chaves do Stripe não encontradas. Verifique seu arquivo .env.")
+		}
+
+		fmt.Println("\n==================================================")
+		fmt.Println(" 💳 INICIANDO WEBHOOK DO STRIPE ")
+		fmt.Println("==================================================")
+
+		http.HandleFunc("/webhook", payment.HandleWebhook(cfg, w.GetBot()))
+		log.Fatal(http.ListenAndServe(":8080", nil))
 	}()
 
+	w.StartWorker()
 	// 5. Inicia o Webhook do Stripe
-	if cfg.StripeSecretKey == "" || cfg.StripeWebhookSecret == "" {
-		log.Fatal("❌ Chaves do Stripe não encontradas. Verifique seu arquivo .env.")
-	}
 
-	fmt.Println("\n==================================================")
-	fmt.Println(" 💳 INICIANDO WEBHOOK DO STRIPE ")
-	fmt.Println("==================================================")
-
-	http.HandleFunc("/webhook", payment.HandleWebhook(cfg))
-	log.Fatal(http.ListenAndServe(":8080", nil))
 }

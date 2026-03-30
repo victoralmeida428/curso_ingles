@@ -108,15 +108,39 @@ func UpdateSubscription(chatID int64, days int) error {
 	return err
 }
 
-// GetUser busca as informações do usuário. Retorna os dados vazios se ele não existir ainda.
+// GetUser busca as informações do usuário. 
+// Se o usuário não existir, ele é criado automaticamente no banco com valores padrão.
 func GetUser(id int64) UserData {
 	user := UserData{ID: id}
 	query := `SELECT lang, tipo, nivel, expires_at, daily_audio_count, last_audio_reset FROM users WHERE id = ?`
 
-	// Utiliza o 'db' global diretamente
-	err := db.QueryRow(query, id).Scan(&user.Lang, &user.Tipo, &user.Nivel, &user.ExpiresAt, &user.DailyAudioCount, &user.LastAudioReset)
-	if err != nil && err != sql.ErrNoRows {
-		log.Printf("Erro ao buscar usuário %d no banco: %v\n", id, err)
+	err := db.QueryRow(query, id).Scan(
+		&user.Lang, 
+		&user.Tipo, 
+		&user.Nivel, 
+		&user.ExpiresAt, 
+		&user.DailyAudioCount, 
+		&user.LastAudioReset,
+	)
+
+	// Se não encontrar o usuário (banco vazio para este ID)
+	if err == sql.ErrNoRows {
+		log.Printf("🆕 Criando novo registro para o usuário %d no banco.", id)
+		
+		// Insere o usuário com os valores padrão
+		insertQuery := `INSERT INTO users (id, lang, tipo, nivel, expires_at, daily_audio_count, last_audio_reset) VALUES (?, '', '', '', 0, 0, 0)`
+		_, insertErr := db.Exec(insertQuery, id)
+		
+		if insertErr != nil {
+			log.Printf("❌ Erro ao criar usuário %d: %v\n", id, insertErr)
+		}
+		
+		// Retorna o objeto base (já inicializado com o ID fornecido)
+		return user
+	}
+
+	if err != nil {
+		log.Printf("❌ Erro ao buscar usuário %d no banco: %v\n", id, err)
 	}
 
 	return user
