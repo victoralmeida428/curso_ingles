@@ -3,19 +3,18 @@ package config
 import "os"
 
 type (
+
 	Config struct {
 		OpenRouterAPIKey    string
 		TelegramBotToken    string
 		DatabasePath        string
 		StripeSecretKey     string
 		StripeWebhookSecret string
-		StripePriceID       string
-		PriceMonthlyID      string // R$ 10
-		PriceSemiannualID   string // R$ 55
-		PriceAnnualID       string // R$ 100
 		TelegramURL         string
 	}
 )
+
+
 
 func LoadConfig() *Config {
 	return &Config{
@@ -24,9 +23,6 @@ func LoadConfig() *Config {
 		DatabasePath:        "./usuarios.sqlite",
 		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
 		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
-		PriceMonthlyID:      os.Getenv("PRICE_MONTHLY_ID"),
-		PriceSemiannualID:   os.Getenv("PRICE_SEMIANNUAL_ID"),
-		PriceAnnualID:       os.Getenv("PRICE_ANNUAL_ID"),
 		TelegramURL:         os.Getenv("TELEGRAM_URL"),
 	}
 }

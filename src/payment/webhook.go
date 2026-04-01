@@ -53,18 +53,18 @@ func HandleWebhook(cfg *config.Config, b *bot.Bot) http.HandlerFunc {
 			priceID := session.Metadata["price_id"]
 
 			days := 0
-			switch priceID {
-			case cfg.PriceMonthlyID:
+			switch Plan(priceID) {
+			case PlanBasicMonthly, PlanProMonthly:
 				days = 31
-			case cfg.PriceSemiannualID:
+			case PlanBasicSemiannual, PlanProSemiannual:
 				days = 183
-			case cfg.PriceAnnualID:
+			case PlanBasicAnnual, PlanProAnnual:
 				days = 366
 			}
 
 			if days > 0 && chatID != 0 {
 				log.Printf("⚙️ Atualizando assinatura: ChatID %d por %d dias", chatID, days)
-				errDb := database.UpdateSubscription(chatID, days)
+				errDb := database.UpdateSubscription(chatID, days, priceID)
 
 				if errDb == nil {
 					// ENVIA NOTIFICAÇÃO DE SUCESSO PARA O USUÁRIO NO TELEGRAM

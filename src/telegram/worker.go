@@ -90,8 +90,9 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 		ChatID: chatID,
 	}
 
+	// Verifica se o utilizador é subscritor antes de permitir conversa
 	if !user.IsSubscribed() && !strings.HasPrefix(msgText, "/assinar") && !strings.HasPrefix(msgText, "/start") {
-		rawMsg.Text = "Você não é assinante. Use /assinar para assinar."
+		rawMsg.Text = "Você não possui uma assinatura ativa. Use /assinar para escolher um plano e começar a praticar."
 		sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 		return
 	}
@@ -101,78 +102,64 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 		case strings.HasPrefix(msgText, "/start"):
 			rawMsg.Text = `🚀 <b>Bem-vindo ao Zellang!</b> 🤖
 
-				Eu sou seu mentor pessoal de inglês alimentado por Inteligência Artificial. Meu objetivo é ajudar você a alcançar a fluência de forma natural e dinâmica.
+                Eu sou seu mentor pessoal de idiomas. Vamos acelerar a sua fluência!
 
-				🌟 <b>O que eu posso fazer?</b>
-				• <b>Conversa Real:</b> Pratique inglês via texto ou <b>mensagens de voz</b>. Eu respondo você com áudio de alta fidelidade!
-				• <b>Personalização:</b> Adaptado ao seu idioma nativo, nível de fluência e tipo de vocabulário (formal, técnico ou casual).
-				• <b>Nivelamento:</b> Posso avaliar suas habilidades e definir seu nível CEFR (A1 a C2).
+                🌟 <b>Nossos Planos:</b>
+                • <b>Basic (R$ 10):</b> Pratique via texto de forma ilimitada.
+                • <b>Pro (R$ 60):</b> Conversação real por voz (até 30 áudios/dia).
 
-				🛠 <b>Como começar?</b>
-				Primeiro, configure seu perfil para que eu possa ajustar minhas respostas:
-				1. /lang - Defina seu idioma nativo (ex: <code>/lang Português</code>)
-				2. /tipo - Escolha o foco (ex: <code>/tipo técnico</code>)
-				3. /nivel - Defina seu nível (ex: <code>/nivel intermediário</code>)
-				4. /nivelar - Inicie um teste guiado de 4 perguntas.
+                🛠 <b>Como começar?</b>
+                1. /lang - Defina o idioma que quer praticar.
+                2. /nivel - Defina o seu nível.
+                3. /assinar - Escolha o seu plano.
 
-				👤 <b>Seu Perfil:</b> Use /perfil para ver suas configurações.
-				💎 <b>Assinatura:</b> Use /assinar para liberar acesso total às conversas.
-
-				<i>Diga "Hello" ou envie um áudio para começarmos a praticar!</i>`
+                <i>Diga "Hello" ou envie um texto para começarmos!</i>`
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
+
 		case strings.HasPrefix(msgText, "/assinar"):
 			cfg := config.LoadConfig()
-			// Gerar links para os 3 planos
-			linkMensal, _ := payment.CreateCheckoutSession(chatID, cfg.PriceMonthlyID, cfg)
-			linkSemestral, _ := payment.CreateCheckoutSession(chatID, cfg.PriceSemiannualID, cfg)
-			linkAnual, _ := payment.CreateCheckoutSession(chatID, cfg.PriceAnnualID, cfg)
+
+			// Links para os novos produtos (Certifique-se de atualizar os IDs no seu .env ou config)
+			linkBasic, _ := payment.CreateCheckoutSession(chatID, string(payment.PlanBasicMonthly), cfg) // Mapeado para o de R$ 10
+			linkPro, _ := payment.CreateCheckoutSession(chatID, string(payment.PlanProMonthly), cfg)    // Reaproveite um ID ou crie um novo para R$ 60
 
 			rawMsg.Text = fmt.Sprintf(
-				"💎 <b>Escolha seu plano Zellang:</b>\n\n"+
-					"• <b>Mensal:</b> R$ 10,00\n<a href='%s'>👉 Assinar Mensal</a>\n\n"+
-					"• <b>Semestral:</b> R$ 55,00 (Economia de R$ 5)\n<a href='%s'>👉 Assinar Semestral</a>\n\n"+
-					"• <b>Anual:</b> R$ 100,00 (Melhor preço! R$ 8,33/mês)\n<a href='%s'>👉 Assinar Anual</a>",
-				linkMensal, linkSemestral, linkAnual,
+				"💎 <b>Escolha o seu plano Zellang:</b>\n\n"+
+					"🔹 <b>Plano Basic - R$ 10,00/mês</b>\n"+
+					"• Conversas ilimitadas por <u>texto</u>.\n"+
+					"<a href='%s'>👉 Assinar Basic</a>\n\n"+
+					"🔸 <b>Plano Pro - R$ 60,00/mês</b>\n"+
+					"• Conversas por <u>texto e voz</u>.\n"+
+					"• Até 30 mensagens de áudio por dia.\n"+
+					"<a href='%s'>👉 Assinar Pro</a>",
+				linkBasic, linkPro,
 			)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
+
 		case strings.HasPrefix(msgText, "/lang "):
 			user.Lang = strings.TrimPrefix(msgText, "/lang ")
 			_ = database.SaveUser(user)
 			rawMsg.Text = fmt.Sprintf("✅ Idioma definido para: %s", user.Lang)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
-		case strings.HasPrefix(msgText, "/tipo "):
-			user.Tipo = strings.TrimPrefix(msgText, "/tipo ")
-			_ = database.SaveUser(user)
-			rawMsg.Text = fmt.Sprintf("✅ Tipo definido para: %s", user.Tipo)
-			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
-			return
+
 		case strings.HasPrefix(msgText, "/nivel "):
 			user.Nivel = strings.TrimPrefix(msgText, "/nivel ")
 			_ = database.SaveUser(user)
 			rawMsg.Text = fmt.Sprintf("✅ Nível definido para: %s", user.Nivel)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
+
 		case msgText == "/perfil":
-			usoAudio := fmt.Sprintf("%d/%d", user.DailyAudioCount, MaxDailyAudios)
+            // Aqui você pode adicionar a lógica de mostrar qual o plano do user
+			usoAudio := fmt.Sprintf("%d/30", user.DailyAudioCount)
 			rawMsg.Text = fmt.Sprintf("👤 <b>Seu Perfil:</b>\nIdioma: %s\nNível: %s\n\n🎙 <b>Uso de Voz hoje:</b> %s",
 				fallback(user.Lang), fallback(user.Nivel), usoAudio)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
-		case strings.HasPrefix(msgText, "/nivelar"):
-			rawMsg.Text = "Você é agora meu avaliador de inglês. Inicie o meu teste de nivelamento para descobrir meu nível CEFR (A1 a C2). O teste deve avaliar as seguintes 4 habilidades: Vocabulário, Escrita, Pronúncia (exija que eu mande áudios testando a fala/leitura de textos que você enviar) e Leitura.\n\nRegras CRÍTICAS do teste:\n1. Faça EXATAMENTE UMA pergunta para cada habilidade (Total de 4 perguntas no teste inteiro).\n2. Faça apenas UMA pergunta por vez, esperando minha resposta antes de ir para a próxima habilidade.\n3. Após eu responder a 4ª e última pergunta, encerre o teste, me dê um feedback geral e o meu nível CEFR final (A1, A2, B1, B2, C1 ou C2).\n4. Faça a primeira pergunta do teste agora."
-			_ = processIncomingMessage(ctx, rawMsg, client, user, b, cache)
-		case strings.HasPrefix(msgText, "/credits"):
-			credit, err := client.GetCredits(ctx)
-			if err != nil {
-				rawMsg.Text = fmt.Sprintf("Erro ao obter créditos: %v", err)
-			} else {
-				rawMsg.Text = fmt.Sprintf("Créditos: %.2f", credit.Remaining)
-			}
-			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
-			return
+
 		default:
 			rawMsg.Text = msgText
 			_ = processIncomingMessage(ctx, rawMsg, client, user, b, cache)
@@ -182,44 +169,33 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 		_ = processIncomingMessage(ctx, rawMsg, client, user, b, cache)
 	}
 
-	// =========================================================
-	// ROTEAMENTO DE SAÍDA: ENVIA ÁUDIO NATIVO (VOICE) 100% EM RAM
-	// =========================================================
-
+	// [O restante do código de conversão FFmpeg permanece igual]
 	if len(rawMsg.ResponseAudioBytes) > 0 {
-		// 1. Prepara o leitor com os bytes em MP3 recebidos da IA
 		inputReader := bytes.NewReader(rawMsg.ResponseAudioBytes)
-
-		// 2. Prepara os buffers de memória para receber a saída e os erros
 		var oggBuffer bytes.Buffer
 		var errLog bytes.Buffer
 
-		// 3. Executa o FFmpeg na RAM (lê do stdin, converte para Opus, escreve no stdout)
-		// O "-f ogg" é obrigatório aqui porque não temos um nome de arquivo para o FFmpeg adivinhar o formato
 		cmd := exec.CommandContext(ctx, "ffmpeg",
-			"-f", "s16le", // Formato de entrada: PCM 16-bit little-endian
-			"-ar", "24000", // Sample rate: 24 kHz (padrão da OpenAI)
-			"-ac", "1", // Canais: 1 (Mono)
-			"-i", "pipe:0", // Origem: Memória RAM
-			"-c:a", "libopus", // Codec de saída: Opus (Obrigatório pro Telegram)
-			"-b:a", "48k", // Bitrate: 48 kbps
-			"-f", "ogg", // Container: OGG
-			"pipe:1", // Destino: Memória RAM
+			"-f", "s16le",
+			"-ar", "24000",
+			"-ac", "1",
+			"-i", "pipe:0",
+			"-c:a", "libopus",
+			"-b:a", "48k",
+			"-f", "ogg",
+			"pipe:1",
 		)
 
 		cmd.Stdin = inputReader
 		cmd.Stdout = &oggBuffer
 		cmd.Stderr = &errLog
 
-		// 4. Inicia a conversão
 		if errCmd := cmd.Run(); errCmd == nil {
 			caption := rawMsg.Text
 			if len(caption) > 1024 {
 				caption = caption[:1020] + "..."
 			}
 
-			// 5. O buffer "oggBuffer" agora tem os bytes em OGG Opus perfeitos.
-			// Usamos bytes.NewReader para enviá-lo direto ao Telegram.
 			_, err := b.SendVoice(ctx, &bot.SendVoiceParams{
 				ChatID:    chatID,
 				Voice:     &models.InputFileUpload{Filename: "resposta.ogg", Data: bytes.NewReader(oggBuffer.Bytes())},
@@ -228,11 +204,11 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 			})
 
 			if err == nil {
-				return // Sucesso, áudio enviado perfeitamente!
+				return
 			}
 			log.Printf("Erro ao enviar SendVoice: %v", err)
 		} else {
-			log.Printf("Erro no FFmpeg (MP3 -> OGG em RAM): %v | Log: %s", errCmd, errLog.String())
+			log.Printf("Erro no FFmpeg: %v | Log: %s", errCmd, errLog.String())
 		}
 	}
 }

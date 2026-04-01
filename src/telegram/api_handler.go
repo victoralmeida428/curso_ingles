@@ -116,7 +116,7 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 		chat.Model = "google/gemini-2.5-flash-lite"
 		chat.Modalities = []string{"text"}
 	} else {
-		chat.Model = "openai/gpt-4o-audio-preview"
+		chat.Model = "openai/gpt-4o-audio-preview-mini"
 		chat.Modalities = []string{"text", "audio"}
 		chat.Audio = &types.AudioConfig{
 			Voice:  "alloy",

@@ -19,6 +19,7 @@ type UserData struct {
 	ExpiresAt       int64 // Timestamp de expiração
 	DailyAudioCount int   // Novo: Contador de áudios hoje
 	LastAudioReset  int64 // Novo: Timestamp do último reset (meia-noite)
+	PriceID         string
 }
 
 func (u *UserData) IsSubscribed() bool {
@@ -50,7 +51,8 @@ func GetDB(dbPath string) (*sql.DB, error) {
 			nivel TEXT DEFAULT '',
 			expires_at INTEGER DEFAULT 0,
 			daily_audio_count INTEGER DEFAULT 0,
-			last_audio_reset INTEGER DEFAULT 0
+			last_audio_reset INTEGER DEFAULT 0,
+			price_id TEXT DEFAULT '',
 		);`
 
 		if _, err := db.Exec(query); err != nil {
@@ -69,7 +71,7 @@ func IncrementAudioUsage(chatID int64) error {
 
 	// Se o último reset foi antes de hoje, zeramos o contador
 	_, err := db.Exec(`
-		UPDATE users 
+		UPDATE users
 		SET daily_audio_count = CASE WHEN last_audio_reset < ? THEN 1 ELSE daily_audio_count + 1 END,
 		    last_audio_reset = ?
 		WHERE id = ?`, beginningOfDay, now.Unix(), chatID)
@@ -79,9 +81,9 @@ func IncrementAudioUsage(chatID int64) error {
 // SaveUser atualiza ou insere as preferências do usuário de forma segura
 func SaveUser(user UserData) error {
 	query := `
-	INSERT INTO users (id, lang, tipo, nivel) 
+	INSERT INTO users (id, lang, tipo, nivel)
 	VALUES (?, ?, ?, ?)
-	ON CONFLICT(id) DO UPDATE SET 
+	ON CONFLICT(id) DO UPDATE SET
 		lang = excluded.lang,
 		tipo = excluded.tipo,
 		nivel = excluded.nivel;`
@@ -92,7 +94,7 @@ func SaveUser(user UserData) error {
 }
 
 // UpdateSubscription prolonga o acesso do usuário
-func UpdateSubscription(chatID int64, days int) error {
+func UpdateSubscription(chatID int64, days int, priceID string) error {
 	// Calcula a nova data: se já for VIP, soma ao tempo restante; se não, soma a partir de agora
 	user := GetUser(chatID)
 	var newExpiration int64
@@ -104,37 +106,38 @@ func UpdateSubscription(chatID int64, days int) error {
 		newExpiration = now + int64(days*24*60*60)
 	}
 
-	_, err := db.Exec("UPDATE users SET expires_at = ? WHERE id = ?", newExpiration, chatID)
+	_, err := db.Exec("UPDATE users SET expires_at = ?, price_id = ? WHERE id = ?", newExpiration, chatID)
 	return err
 }
 
-// GetUser busca as informações do usuário. 
+// GetUser busca as informações do usuário.
 // Se o usuário não existir, ele é criado automaticamente no banco com valores padrão.
 func GetUser(id int64) UserData {
 	user := UserData{ID: id}
-	query := `SELECT lang, tipo, nivel, expires_at, daily_audio_count, last_audio_reset FROM users WHERE id = ?`
+	query := `SELECT lang, tipo, nivel, expires_at, daily_audio_count, last_audio_reset, price_id FROM users WHERE id = ?`
 
 	err := db.QueryRow(query, id).Scan(
-		&user.Lang, 
-		&user.Tipo, 
-		&user.Nivel, 
-		&user.ExpiresAt, 
-		&user.DailyAudioCount, 
+		&user.Lang,
+		&user.Tipo,
+		&user.Nivel,
+		&user.ExpiresAt,
+		&user.DailyAudioCount,
 		&user.LastAudioReset,
+		&user.PriceID,
 	)
 
 	// Se não encontrar o usuário (banco vazio para este ID)
 	if err == sql.ErrNoRows {
 		log.Printf("🆕 Criando novo registro para o usuário %d no banco.", id)
-		
+
 		// Insere o usuário com os valores padrão
 		insertQuery := `INSERT INTO users (id, lang, tipo, nivel, expires_at, daily_audio_count, last_audio_reset) VALUES (?, '', '', '', 0, 0, 0)`
 		_, insertErr := db.Exec(insertQuery, id)
-		
+
 		if insertErr != nil {
 			log.Printf("❌ Erro ao criar usuário %d: %v\n", id, insertErr)
 		}
-		
+
 		// Retorna o objeto base (já inicializado com o ID fornecido)
 		return user
 	}
