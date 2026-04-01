@@ -21,6 +21,9 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
+// Constante para o funil de vendas (Isca gratuita)
+const LimiteMensagensGratuitas = 5
+
 type Worker struct {
 	bot    *bot.Bot
 	db     *sql.DB
@@ -56,13 +59,12 @@ func (w *Worker) StartWorker() {
 	defer cancel()
 
 	comandos := []models.BotCommand{
-		{Command: "start", Description: "Inicia o bot e mostra as instruções"},
+		{Command: "start", Description: "Inicia o bot e ganhe mensagens grátis"},
 		{Command: "perfil", Description: "Mostra o perfil atual"},
 		{Command: "lang", Description: "Define o idioma"},
 		{Command: "tipo", Description: "Define o vocabulário"},
 		{Command: "nivel", Description: "Define seu nível atual"},
-		{Command: "nivelar", Description: "Faz um teste guiado para descobrir o seu nível de inglês"},
-		{Command: "assinar", Description: "Assina o Zellang"},
+		{Command: "assinar", Description: "Destrave o acesso ilimitado"},
 	}
 
 	if _, err := w.bot.SetMyCommands(ctx, &bot.SetMyCommandsParams{Commands: comandos}); err != nil {
@@ -78,7 +80,6 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 	isVoice := update.Message != nil && update.Message.Voice != nil
 	isAudio := update.Message != nil && update.Message.Audio != nil
 
-
 	if !isText && !isVoice && !isAudio {
 		return
 	}
@@ -87,6 +88,7 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 	msgText := update.Message.Text
 	user := database.GetUser(chatID)
 	isElegivel := !user.TrialUsed
+
 	if user.ID == 0 {
 		_ = database.SaveUser(user)
 	}
@@ -95,48 +97,53 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 		ChatID: chatID,
 	}
 
-	// Verifica se o utilizador é subscritor antes de permitir conversa
-	if !user.IsSubscribed() && !strings.HasPrefix(msgText, "/assinar") && !strings.HasPrefix(msgText, "/start") {
-		rawMsg.Text = "Você não possui uma assinatura ativa. Use /assinar para escolher um plano e começar a praticar."
-		sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
-		return
+	isCommand := strings.HasPrefix(msgText, "/")
+
+	// ==========================================
+	// 🚀 FUNIL DE VENDAS (PAYWALL INTELIGENTE)
+	// ==========================================
+	if !user.IsSubscribed() && !isCommand {
+		if user.FreeUsed >= LimiteMensagensGratuitas {
+			// Bateu no limite. Mostra o valor que ele perdeu e oferece o plano.
+			rawMsg.Text = "⏳ <b>Seu teste gratuito chegou ao fim!</b>\n\nVocê mandou super bem nas respostas! Para continuar praticando e não perder o ritmo, escolha um dos nossos planos.\n\n👉 Digite /assinar para destravar o Zellang."
+			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
+			return
+		} else {
+			// Ainda tem mensagens grátis. Incrementa o uso no banco de dados silenciosamente.
+			_ = database.IncrementFreeUse(chatID)
+		}
 	}
 
 	if isText {
 		switch {
 		case strings.HasPrefix(msgText, "/start"):
-			rawMsg.Text = `🚀 <b>Bem-vindo ao Zellang!</b> 🤖
+			rawMsg.Text = fmt.Sprintf(`🚀 <b>Bora destravar seu inglês?</b>
 
-                Eu sou seu mentor pessoal de idiomas. Vamos acelerar a sua fluência!
+				Você pode treinar conversação real aqui comigo — sem professor te julgando, sem horário fixo.
 
-                🌟 <b>Nossos Planos:</b>
-                • <b>Basic (R$ 10):</b> Pratique via texto de forma ilimitada.
-                • <b>Pro (R$ 60):</b> Conversação real por voz (até 30 áudios/dia).
+				🎁 <b>Presente:</b> Você ganhou %d mensagens gratuitas para testar a IA agora mesmo!
 
-                🛠 <b>Como começar?</b>
-                1. /lang - Defina o idioma que quer praticar.
-                2. /nivel - Defina o seu nível.
-                3. /assinar - Escolha o seu plano.
+				👇 <b>O que você quer treinar hoje?</b> (Responda com 1, 2 ou 3)
 
-                <i>Diga "Hello" ou envie um texto para começarmos!</i>`
+				1️⃣ Conversação do dia a dia  
+				2️⃣ Inglês para o trabalho  
+				3️⃣ Viagem e Aeroporto`, LimiteMensagensGratuitas)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
 
 		case strings.HasPrefix(msgText, "/assinar"):
 			cfg := config.LoadConfig()
 
-			// LÓGICA INTELIGENTE: Verifica o status atual da assinatura do usuário
 			if user.IsSubscribed() {
 				switch user.PriceID {
 				case "PRO":
-					rawMsg.Text = "✅ <b>Você já possui o Plano Pro ativo!</b>\n\nSeu acesso total está liberado. Não é necessário assinar novamente."
+					rawMsg.Text = "✅ <b>Você já é VIP! (Plano Pro Ativo)</b>\n\nSeu acesso total está liberado. Não é necessário assinar novamente. Pode mandar áudio ou texto!"
 					sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 					return
 				case "BASIC":
-					// Oferece apenas o Upgrade para o PRO
 					linkPro, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanProMonthly), cfg, isElegivel)
 					rawMsg.Text = fmt.Sprintf(
-						"✅ <b>Você possui o Plano Basic ativo!</b>\n\nDeseja fazer um <b>Upgrade para o Plano Pro</b> e liberar a conversação real por voz (30 áudios/dia)?\n\n<a href='%s'>👉 Fazer Upgrade para o Pro</a>",
+						"✅ <b>Você já possui o Plano Basic!</b>\n\nDeseja dar o próximo passo na fluência?\n\nFaça o <b>Upgrade para o Plano Pro</b> e libere a conversação por voz (Até 30 áudios/dia).\n\n<a href='%s'>👉 Quero falar inglês (Upgrade Pro)</a>",
 						linkPro,
 					)
 					sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
@@ -144,24 +151,26 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 				}
 			}
 
-			// Se não for inscrito ou não tiver plano definido, mostra as duas opções
-			linkBasic, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanBasicMonthly), cfg, isElegivel) // Mapeado para o de R$ 10
-			linkPro, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanProMonthly), cfg, isElegivel)     // Mapeado para o de R$ 60
+			linkBasic, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanBasicMonthly), cfg, isElegivel)
+			linkPro, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanProMonthly), cfg, isElegivel)
 
 			rawMsg.Text = fmt.Sprintf(
-				"💎 <b>Escolha o seu plano Zellang:</b>\n\n"+
+				"💎 <b>Escolha como você quer ficar fluente:</b>\n\n"+
 					"🔹 <b>Plano Basic - R$ 10,00/mês</b>\n"+
-					"• Conversas ilimitadas por <u>texto</u>.\n"+
+					"• Prática ilimitada por <u>texto</u>.\n"+
+					"• Correções nativas na hora.\n"+
 					"<a href='%s'>👉 Assinar Basic</a>\n\n"+
 					"🔸 <b>Plano Pro - R$ 60,00/mês</b>\n"+
-					"• Conversas por <u>texto e voz</u>.\n"+
-					"• Até 30 mensagens de áudio por dia.\n"+
-					"<a href='%s'>👉 Assinar Pro</a>",
+					"• Prática completa: <u>texto e VOZ</u>.\n"+
+					"• Até 30 áudios por dia (Escute e Fale).\n"+
+					"• Imersão real de intercâmbio.\n"+
+					"<a href='%s'>👉 Assinar Pro (Mais Recomendado)</a>",
 				linkBasic, linkPro,
 			)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
 
+		// ... (comandos de lang, nivel, tipo mantidos)
 		case strings.HasPrefix(msgText, "/lang "):
 			user.Lang = strings.TrimPrefix(msgText, "/lang ")
 			_ = database.SaveUser(user)
@@ -179,26 +188,46 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 		case strings.HasPrefix(msgText, "/tipo "):
 			user.Tipo = strings.TrimPrefix(msgText, "/tipo ")
 			_ = database.SaveUser(user)
-			rawMsg.Text = fmt.Sprintf("✅ Tipo definido para: %s", user.Tipo)
+			rawMsg.Text = fmt.Sprintf("✅ Foco definido para: %s", user.Tipo)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
 
 		case msgText == "/perfil":
 			usoAudio := fmt.Sprintf("%d/30", user.DailyAudioCount)
+			statusAssinatura := user.PriceID
+			if !user.IsSubscribed() {
+				statusAssinatura = fmt.Sprintf("Grátis (%d/%d msgs)", user.FreeUsed, LimiteMensagensGratuitas)
+			}
+
 			rawMsg.Text = fmt.Sprintf("👤 <b>Seu Perfil:</b>\nPlano Atual: <b>%s</b>\nIdioma: %s\nNível: %s\n\n🎙 <b>Uso de Voz hoje:</b> %s",
-				fallback(user.PriceID), fallback(user.Lang), fallback(user.Nivel), usoAudio)
+				statusAssinatura, fallback(user.Lang), fallback(user.Nivel), usoAudio)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
+		case msgText == "1" || msgText == "2" || msgText == "3":
+			var novoTipo string
+			var promptOculto string
 
-		case msgText == "/creditos":
-			credits, err := client.GetCredits(ctx)
-			if err != nil {
-				rawMsg.Text = "Erro ao obter créditos"
-				sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
-				return
+			switch msgText {
+			case "1":
+				novoTipo = "Conversação do dia a dia"
+				promptOculto = "Olá! Quero treinar conversação do dia a dia. Pode puxar assunto comigo de forma natural para começarmos?"
+			case "2":
+				novoTipo = "Inglês para o trabalho"
+				promptOculto = "Olá! Quero treinar inglês focado no ambiente de trabalho. Pode simular uma situação de escritório ou reunião comigo?"
+			case "3":
+				novoTipo = "Viagem e Aeroporto"
+				promptOculto = "Olá! Quero treinar vocabulário de viagem e aeroporto. Pode iniciar um roleplay (simulação) comigo como se eu estivesse viajando?"
 			}
-			rawMsg.Text = fmt.Sprintf("💰 <b>Seus Créditos:</b>\nCréditos: %.2f", credits.Remaining)
-			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
+
+			// Salva a escolha no banco de dados para a IA lembrar depois
+			user.Tipo = novoTipo
+			_ = database.SaveUser(user)
+
+			// Engana a IA: substitui o número isolado por um texto rico e explicativo
+			rawMsg.Text = promptOculto
+
+			// Manda para a IA processar a mensagem "oculta"
+			_ = processIncomingMessage(ctx, rawMsg, client, user, b, cache)
 			return
 
 		default:
@@ -206,11 +235,11 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 			_ = processIncomingMessage(ctx, rawMsg, client, user, b, cache)
 		}
 	} else if isVoice || isAudio {
-		// CORREÇÃO DA TRAVA: Agora verifica a string "PRO"
+		// UPSELL DE ÁUDIO MELHORADO
 		if user.PriceID != "PRO" {
-			msgBlock := "🎙️ <b>Recurso Premium</b>\n\nO envio e recebimento de mensagens de voz é exclusivo do <b>Plano Pro</b>.\n\nUse /assinar para fazer o upgrade e liberar a conversação real!"
+			msgBlock := "🎙️ <b>Gostaria de falar em vez de digitar?</b>\n\nA conversação real por voz é o que mais acelera a fluência, mas esse recurso é exclusivo do <b>Plano Pro</b>.\n\n👉 Digite /assinar para destravar o envio e recebimento de áudios!"
 			sendTextMessage(ctx, b, chatID, msgBlock, models.ParseModeHTML)
-			return // Para a execução aqui, não gasta API
+			return
 		}
 
 		var fID string
@@ -224,7 +253,7 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 		_ = processIncomingMessage(ctx, rawMsg, client, user, b, cache)
 	}
 
-	// [O restante do código de conversão FFmpeg permanece igual]
+	// [Conversão FFmpeg abaixo... mantida igual]
 	if len(rawMsg.ResponseAudioBytes) > 0 {
 		inputReader := bytes.NewReader(rawMsg.ResponseAudioBytes)
 		var oggBuffer bytes.Buffer
