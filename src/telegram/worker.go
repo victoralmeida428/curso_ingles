@@ -159,6 +159,16 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 				fallback(user.Lang), fallback(user.Nivel), usoAudio)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
+		case msgText == "/creditos":
+			credits, err := client.GetCredits(ctx)
+			if err != nil {
+				rawMsg.Text = "Erro ao obter créditos"
+				sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
+				return
+			}
+			rawMsg.Text = fmt.Sprintf("💰 <b>Seus Créditos:</b>\nCréditos: %d", credits.Remaining)
+			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
+			return
 
 		default:
 			rawMsg.Text = msgText
