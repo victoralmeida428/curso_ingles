@@ -3,6 +3,8 @@
 // --------------------------------------------------------------------
 package types
 
+import "curso/src/openrouter/models"
+
 type (
 	// Message representa uma mensagem na conversa.
 	Message struct {
@@ -33,7 +35,7 @@ type (
 
 	// ChatCompletionRequest é o corpo da requisição para /chat/completions.
 	ChatCompletionRequest struct {
-		Model       string       `json:"model"`
+		Model       models.Model `json:"model"`
 		Messages    []Message    `json:"messages"`
 		Stream      bool         `json:"stream,omitempty"`
 		MaxTokens   *int         `json:"max_tokens,omitempty"`

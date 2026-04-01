@@ -28,7 +28,9 @@ func fetchAndConvertAudio(ctx context.Context, b *bot.Bot, fileID string) (strin
 	if err != nil {
 		return "", fmt.Errorf("erro na requisição de download: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(){
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("telegram retornou status code: %d", resp.StatusCode)
@@ -45,7 +47,7 @@ func fetchAndConvertAudio(ctx context.Context, b *bot.Bot, fileID string) (strin
 
 	// MUDANÇA: Convertendo para MP3 com bitrate de voz (64k) para evitar payloads gigantes
 	cmd := exec.CommandContext(ctx, "ffmpeg", "-i", "pipe:0", "-b:a", "64k", "-f", "mp3", "pipe:1")
-	
+
 	cmd.Stdin = bytes.NewReader(oggBytes)
 	cmd.Stdout = &mp3Buffer
 	cmd.Stderr = &errBuffer // Captura o log de erro para podermos debugar se falhar
