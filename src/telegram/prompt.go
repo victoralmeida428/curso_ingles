@@ -49,5 +49,7 @@ Regras de Assinatura do Zellang:
 		user.Lang, tipo, nivel, user.PriceID,
 	)
 
-	return fmt.Sprintf("%s\n\n%s", basePrompt, userContext)
+	output := "output: html"
+
+	return fmt.Sprintf("%s\n\n%s\n\n%s", basePrompt, userContext, output)
 }
