@@ -10,10 +10,11 @@ import (
 
 	"curso/src/database"
 	"curso/src/openrouter"
+	"curso/src/openrouter/models"
 	"curso/src/openrouter/types"
 
 	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
+	bot_models "github.com/go-telegram/bot/models"
 )
 
 const MaxDailyAudios = 30
@@ -120,10 +121,10 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 
 	// Configuração do modelo baseado na decisão do agente (com as travas já aplicadas)
 	if responderEmTexto {
-		chat.Model = "google/gemini-2.5-flash-lite"
+		chat.Model = models.TEXT
 		chat.Modalities = []string{"text"}
 	} else {
-		chat.Model = "openai/gpt-4o-audio-preview-mini"
+		chat.Model = models.AUDIO
 		chat.Modalities = []string{"text", "audio"}
 		chat.Audio = &types.AudioConfig{
 			Voice:  "alloy",
@@ -146,7 +147,7 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 		msg, errSend := b.SendMessage(reqCtx, &bot.SendMessageParams{
 			ChatID:    rawMsg.ChatID,
 			Text:      "⏳ <i>Digitando...</i>",
-			ParseMode: models.ParseModeHTML,
+			ParseMode: bot_models.ParseModeHTML,
 		})
 		if errSend == nil {
 			messageID = msg.ID
@@ -206,7 +207,7 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 					ChatID:    rawMsg.ChatID,
 					MessageID: messageID,
 					Text:      textoFinal,
-					ParseMode: models.ParseModeHTML,
+					ParseMode: bot_models.ParseModeHTML,
 				})
 				if errFinal != nil && !strings.Contains(errFinal.Error(), "message is not modified") {
 					log.Printf("Erro na edição FINAL da mensagem: %v", errFinal)
@@ -241,7 +242,7 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 			}
 		} else {
 			log.Printf("Aviso: Formato era áudio, mas Base64 chegou vazio.")
-			sendTextMessage(reqCtx, b, rawMsg.ChatID, "Poderia repetir de alguma outra forma?", models.ParseModeHTML)
+			sendTextMessage(reqCtx, b, rawMsg.ChatID, "Poderia repetir de alguma outra forma?", bot_models.ParseModeHTML)
 		}
 	}
 
@@ -256,7 +257,7 @@ func isTextAnswer(ctx context.Context, input string, client openrouter.IClient) 
 		{Role: "user", Content: input},
 	}
 	chat := types.ChatCompletionRequest{
-		Model:      "google/gemini-2.5-flash-lite",
+		Model:      models.TEXT,
 		Messages:   messages,
 		Modalities: []string{"text"},
 	}
