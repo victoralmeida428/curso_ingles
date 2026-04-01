@@ -8,7 +8,8 @@ import (
 	"github.com/stripe/stripe-go/v85/checkout/session"
 )
 
-func CreateCheckoutSession(chatID int64, priceID string, cfg *config.Config) (string, error) {
+// CreateCheckoutSession agora recebe 'elegivelTrial' para decidir se aplica os 3 dias grátis
+func CreateCheckoutSession(chatID int64, priceID string, cfg *config.Config, elegivelTrial bool) (string, error) {
 	stripe.Key = cfg.StripeSecretKey
 
 	params := &stripe.CheckoutSessionParams{
@@ -26,6 +27,13 @@ func CreateCheckoutSession(chatID int64, priceID string, cfg *config.Config) (st
 			"chat_id":  fmt.Sprintf("%d", chatID),
 			"price_id": priceID,
 		},
+	}
+
+	// LÓGICA DO TRIAL: Adiciona os 3 dias apenas se o usuário for elegível
+	if elegivelTrial {
+		params.SubscriptionData = &stripe.CheckoutSessionSubscriptionDataParams{
+			TrialPeriodDays: stripe.Int64(3),
+		}
 	}
 
 	s, err := session.New(params)

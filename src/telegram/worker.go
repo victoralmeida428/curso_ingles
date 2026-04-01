@@ -78,6 +78,7 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 	isVoice := update.Message != nil && update.Message.Voice != nil
 	isAudio := update.Message != nil && update.Message.Audio != nil
 
+
 	if !isText && !isVoice && !isAudio {
 		return
 	}
@@ -85,6 +86,7 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 	chatID := update.Message.Chat.ID
 	msgText := update.Message.Text
 	user := database.GetUser(chatID)
+	isElegivel := !user.TrialUsed
 	if user.ID == 0 {
 		_ = database.SaveUser(user)
 	}
@@ -132,7 +134,7 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 					return
 				case "BASIC":
 					// Oferece apenas o Upgrade para o PRO
-					linkPro, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanProMonthly), cfg)
+					linkPro, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanProMonthly), cfg, isElegivel)
 					rawMsg.Text = fmt.Sprintf(
 						"✅ <b>Você possui o Plano Basic ativo!</b>\n\nDeseja fazer um <b>Upgrade para o Plano Pro</b> e liberar a conversação real por voz (30 áudios/dia)?\n\n<a href='%s'>👉 Fazer Upgrade para o Pro</a>",
 						linkPro,
@@ -143,8 +145,8 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 			}
 
 			// Se não for inscrito ou não tiver plano definido, mostra as duas opções
-			linkBasic, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanBasicMonthly), cfg) // Mapeado para o de R$ 10
-			linkPro, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanProMonthly), cfg)     // Mapeado para o de R$ 60
+			linkBasic, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanBasicMonthly), cfg, isElegivel) // Mapeado para o de R$ 10
+			linkPro, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanProMonthly), cfg, isElegivel)     // Mapeado para o de R$ 60
 
 			rawMsg.Text = fmt.Sprintf(
 				"💎 <b>Escolha o seu plano Zellang:</b>\n\n"+

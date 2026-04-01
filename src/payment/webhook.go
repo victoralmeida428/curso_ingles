@@ -36,7 +36,7 @@ func HandleWebhook(cfg *config.Config, b *bot.Bot) http.HandlerFunc {
 			},
 		)
 		if err != nil {
-			log.Printf("⚠️ Falha na verificação da assinatura: %v", err)
+			log.Printf("⚠️ [WEBHOOK] Falha na assinatura. Segredo usado: %s | Erro: %v", cfg.StripeWebhookSecret, err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -54,17 +54,21 @@ func HandleWebhook(cfg *config.Config, b *bot.Bot) http.HandlerFunc {
 			priceID := session.Metadata["price_id"]
 
 			days := 0
-			switch assinatura.Plan(priceID) {
-			case assinatura.PlanBasicMonthly, assinatura.PlanProMonthly:
-				days = 31
-			case assinatura.PlanBasicSemiannual, assinatura.PlanProSemiannual:
-				days = 183
-			case assinatura.PlanBasicAnnual, assinatura.PlanProAnnual:
-				days = 366
+			if session.AmountTotal == 0 {
+				days = 3
+			} else {
+				switch assinatura.Plan(priceID) {
+				case assinatura.PlanBasicMonthly, assinatura.PlanProMonthly:
+					days = 31
+				case assinatura.PlanBasicSemiannual, assinatura.PlanProSemiannual:
+					days = 183
+				case assinatura.PlanBasicAnnual, assinatura.PlanProAnnual:
+					days = 366
+				}
 			}
 
+			log.Printf("⚙️ Atualizando assinatura: ChatID %d por %d dias", chatID, days)
 			if days > 0 && chatID != 0 {
-				log.Printf("⚙️ Atualizando assinatura: ChatID %d por %d dias", chatID, days)
 				errDb := database.UpdateSubscription(chatID, days, priceID)
 
 				if errDb == nil {
