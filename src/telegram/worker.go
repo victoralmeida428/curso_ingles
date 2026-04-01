@@ -122,7 +122,7 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 
 			// Links para os novos produtos (Certifique-se de atualizar os IDs no seu .env ou config)
 			linkBasic, _ := payment.CreateCheckoutSession(chatID, string(payment.PlanBasicMonthly), cfg) // Mapeado para o de R$ 10
-			linkPro, _ := payment.CreateCheckoutSession(chatID, string(payment.PlanProMonthly), cfg)    // Reaproveite um ID ou crie um novo para R$ 60
+			linkPro, _ := payment.CreateCheckoutSession(chatID, string(payment.PlanProMonthly), cfg)     // Reaproveite um ID ou crie um novo para R$ 60
 
 			rawMsg.Text = fmt.Sprintf(
 				"💎 <b>Escolha o seu plano Zellang:</b>\n\n"+
@@ -153,7 +153,7 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 			return
 
 		case msgText == "/perfil":
-            // Aqui você pode adicionar a lógica de mostrar qual o plano do user
+			// Aqui você pode adicionar a lógica de mostrar qual o plano do user
 			usoAudio := fmt.Sprintf("%d/30", user.DailyAudioCount)
 			rawMsg.Text = fmt.Sprintf("👤 <b>Seu Perfil:</b>\nIdioma: %s\nNível: %s\n\n🎙 <b>Uso de Voz hoje:</b> %s",
 				fallback(user.Lang), fallback(user.Nivel), usoAudio)
@@ -165,6 +165,11 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 			_ = processIncomingMessage(ctx, rawMsg, client, user, b, cache)
 		}
 	} else if isVoice {
+		if user.PriceID != string(payment.PlanProMonthly) {
+			msgBlock := "🎙️ <b>Recurso Premium</b>\n\nO envio e recebimento de mensagens de voz é exclusivo do <b>Plano Pro</b>.\n\nUse /assinar para fazer o upgrade e liberar a conversação real!"
+			sendTextMessage(ctx, b, chatID, msgBlock, models.ParseModeHTML)
+			return // Para a execução aqui, não gasta API
+		}
 		rawMsg.Voice = &VoicePayload{FileID: update.Message.Voice.FileID}
 		_ = processIncomingMessage(ctx, rawMsg, client, user, b, cache)
 	}
