@@ -60,6 +60,10 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 		responderEmTexto = true
 	}
 
+	if !responderEmTexto && user.DailyAudioCount >= MaxDailyAudios {
+		responderEmTexto = true
+	}
+
 	// Prepara a base com o Prompt de Sistema
 	messages := []types.Message{
 		{
@@ -88,7 +92,7 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 	case Audio:
 
 		if user.DailyAudioCount >= MaxDailyAudios {
-			rawMsg.Text = "⚠️ Você atingiu seu limite diário de áudios (20/dia). Para continuar praticando agora, use mensagens de texto!"
+			rawMsg.Text = fmt.Sprintf("⚠️ Você atingiu seu limite diário de áudios (%d/dia). Para continuar praticando agora, use mensagens de texto!", MaxDailyAudios)
 			return nil
 		}
 		// Se for áudio, o cache colocou apenas a frase "[O usuário enviou uma mensagem de áudio.]".
