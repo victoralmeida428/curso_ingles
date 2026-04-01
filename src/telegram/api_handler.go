@@ -11,12 +11,13 @@ import (
 	"curso/src/database"
 	"curso/src/openrouter"
 	"curso/src/openrouter/types"
+	"curso/src/payment"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 )
 
-const MaxDailyAudios = 20
+const MaxDailyAudios = 30
 
 // processIncomingMessage gerencia a conversa com a IA e popula o rawMsg com a resposta.
 func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, client openrouter.IClient, user database.UserData, b *bot.Bot, cache *HistoryCache) (err error) {
@@ -53,6 +54,10 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 	}
 
 	responderEmTexto := isTextAnswer(ctx, classificadorInput, client)
+
+	if user.PriceID != string(payment.PlanProMonthly) {
+		responderEmTexto = true
+	}
 
 	// Prepara a base com o Prompt de Sistema
 	messages := []types.Message{
