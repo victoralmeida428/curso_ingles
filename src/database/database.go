@@ -52,17 +52,33 @@ func GetDB(dbPath string) (*sql.DB, error) {
 			expires_at INTEGER DEFAULT 0,
 			daily_audio_count INTEGER DEFAULT 0,
 			last_audio_reset INTEGER DEFAULT 0,
-			price_id TEXT DEFAULT '',
+			price_id TEXT DEFAULT ''
 		);`
 
 		if _, err := db.Exec(query); err != nil {
 			dbErr = fmt.Errorf("erro ao criar tabela: %w", err)
 			return
 		}
+		_ =  migrate(db)
 	})
 
 	// Retorna a instância global que foi (ou já havia sido) configurada pelo once.Do
 	return db, dbErr
+}
+
+func migrate(db *sql.DB) error {
+    // Lista de colunas que você adicionou recentemente
+    columns := []string{
+        "ALTER TABLE users ADD COLUMN daily_audio_count INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN last_audio_reset INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN price_id TEXT DEFAULT ''",
+    }
+
+    for _, query := range columns {
+        // O SQLite vai dar erro se a coluna já existir, por isso ignoramos o erro aqui
+        _, _ = db.Exec(query)
+    }
+    return nil
 }
 
 func IncrementAudioUsage(chatID int64) error {
