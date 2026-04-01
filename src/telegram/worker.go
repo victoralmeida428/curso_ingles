@@ -166,7 +166,7 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 				sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 				return
 			}
-			rawMsg.Text = fmt.Sprintf("💰 <b>Seus Créditos:</b>\nCréditos: %d", credits.Remaining)
+			rawMsg.Text = fmt.Sprintf("💰 <b>Seus Créditos:</b>\nCréditos: %.2f", credits.Remaining)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
 
