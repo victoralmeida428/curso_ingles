@@ -10,12 +10,10 @@ import (
 
 	"curso/src/database"
 	"curso/src/openrouter"
-	"curso/src/openrouter/models"
 	"curso/src/openrouter/types"
-	"curso/src/payment"
 
 	"github.com/go-telegram/bot"
-	bot_models "github.com/go-telegram/bot/models"
+	"github.com/go-telegram/bot/models"
 )
 
 const MaxDailyAudios = 30
@@ -39,7 +37,6 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 	}()
 
 	// 1. SALVA NA FILA: A mensagem atual do usuário
-	// O cache guarda apenas texto leve na memória RAM
 	textoUsuario := msgInfo.Text
 	if msgInfo.Type == Audio {
 		textoUsuario = "[O usuário enviou uma mensagem de áudio.]"
@@ -56,10 +53,12 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 
 	responderEmTexto := isTextAnswer(ctx, classificadorInput, client)
 
-	if user.PriceID != string(payment.PlanProMonthly) {
+	// 🔒 TRAVA 1: Bloqueia resposta em áudio se não for PRO
+	if user.PriceID != "PRO" {
 		responderEmTexto = true
 	}
 
+	// 🔒 TRAVA 2: Bloqueia resposta em áudio se já atingiu o limite de 30
 	if !responderEmTexto && user.DailyAudioCount >= MaxDailyAudios {
 		responderEmTexto = true
 	}
@@ -86,18 +85,16 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 
 	switch msgInfo.Type {
 	case Text:
-		// Se for texto, não precisamos dar append novamente,
-		// pois a mensagem atual já foi injetada no final do array 'historico' pelo cache.
+		// Se for texto, não precisamos dar append novamente.
 
 	case Audio:
-
+		// 🔒 TRAVA DA ENTRADA: Evita processar a entrada do usuário se já estourou o limite
 		if user.DailyAudioCount >= MaxDailyAudios {
+			// Alterado de 20 para MaxDailyAudios (30)
 			rawMsg.Text = fmt.Sprintf("⚠️ Você atingiu seu limite diário de áudios (%d/dia). Para continuar praticando agora, use mensagens de texto!", MaxDailyAudios)
 			return nil
 		}
-		// Se for áudio, o cache colocou apenas a frase "[O usuário enviou uma mensagem de áudio.]".
-		// Para a requisição atual, a IA precisa ouvir o áudio de verdade.
-		// Então, removemos a última mensagem do array e substituímos pela estrutura multimodal.
+
 		if len(chat.Messages) > 0 {
 			chat.Messages = chat.Messages[:len(chat.Messages)-1]
 		}
@@ -121,12 +118,12 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 		return nil
 	}
 
-	// Configuração do modelo baseado na decisão do agente
+	// Configuração do modelo baseado na decisão do agente (com as travas já aplicadas)
 	if responderEmTexto {
-		chat.Model = models.TEXT
+		chat.Model = "google/gemini-2.5-flash-lite"
 		chat.Modalities = []string{"text"}
 	} else {
-		chat.Model = models.AUDIO
+		chat.Model = "openai/gpt-4o-audio-preview-mini"
 		chat.Modalities = []string{"text", "audio"}
 		chat.Audio = &types.AudioConfig{
 			Voice:  "alloy",
@@ -149,14 +146,14 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 		msg, errSend := b.SendMessage(reqCtx, &bot.SendMessageParams{
 			ChatID:    rawMsg.ChatID,
 			Text:      "⏳ <i>Digitando...</i>",
-			ParseMode: bot_models.ParseModeHTML,
+			ParseMode: models.ParseModeHTML,
 		})
 		if errSend == nil {
-			messageID = msg.ID // Guarda o ID para editar depois
+			messageID = msg.ID
 		}
 	}
 
-	// Temporizador para evitar Rate Limit do Telegram (atualiza a cada 1.5 segundos)
+	// Temporizador para evitar Rate Limit do Telegram
 	lastEditTime := time.Now()
 	tickerPeriod := 800 * time.Millisecond
 
@@ -164,20 +161,17 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 	for event := range streamChan {
 		if event.Error != nil {
 			log.Printf("Erro no meio do stream: %v", event.Error)
-			break // Sai do loop, mas aproveita o que já foi gerado
+			break
 		}
 
-		// Acumula texto
 		if event.Transcript != "" {
 			fullText.WriteString(event.Transcript)
 		}
 
-		// Acumula os pedaços de áudio em Base64
 		if event.Audio != nil && event.Audio.Data != "" {
 			fullAudio.WriteString(event.Audio.Data)
 		}
 
-		// 4. Edita a mensagem do Telegram em tempo real (apenas se for texto)
 		if responderEmTexto && messageID != 0 {
 			if time.Since(lastEditTime) > tickerPeriod {
 				currentText := fullText.String()
@@ -188,12 +182,9 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 						Text:      currentText + " ✍️",
 					})
 
-					if errEdit != nil {
-						if !strings.Contains(errEdit.Error(), "message is not modified") {
-							log.Printf("Aviso ao editar mensagem de stream: %v", errEdit)
-						}
+					if errEdit != nil && !strings.Contains(errEdit.Error(), "message is not modified") {
+						log.Printf("Aviso ao editar mensagem de stream: %v", errEdit)
 					}
-
 					lastEditTime = time.Now()
 				}
 			}
@@ -215,13 +206,12 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 					ChatID:    rawMsg.ChatID,
 					MessageID: messageID,
 					Text:      textoFinal,
-					ParseMode: bot_models.ParseModeHTML,
+					ParseMode: models.ParseModeHTML,
 				})
 				if errFinal != nil && !strings.Contains(errFinal.Error(), "message is not modified") {
 					log.Printf("Erro na edição FINAL da mensagem: %v", errFinal)
 				}
 			} else {
-				// Se chegou aqui vazio, o stream falhou silenciosamente
 				_, _ = b.EditMessageText(reqCtx, &bot.EditMessageTextParams{
 					ChatID:    rawMsg.ChatID,
 					MessageID: messageID,
@@ -230,6 +220,7 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 			}
 		}
 	} else {
+		// INÍCIO DO TRATAMENTO DE ÁUDIO
 		base64Total := fullAudio.String()
 		if base64Total != "" {
 			if m := len(base64Total) % 4; m != 0 {
@@ -238,12 +229,19 @@ func processIncomingMessage(ctx context.Context, rawMsg *RawTelegramMessage, cli
 			decodedBytes, errDecode := base64.StdEncoding.DecodeString(base64Total)
 			if errDecode == nil {
 				rawMsg.ResponseAudioBytes = decodedBytes
+
+				// 💰 INCREMENTA O CONTADOR APÓS GERAR O ÁUDIO COM SUCESSO
+				errInc := database.IncrementAudioUsage(rawMsg.ChatID)
+				if errInc != nil {
+					log.Printf("Aviso: Falha ao incrementar o contador de áudio para o chatID %d: %v", rawMsg.ChatID, errInc)
+				}
+
 			} else {
 				log.Printf("Erro ao decodificar Base64: %v", errDecode)
 			}
 		} else {
 			log.Printf("Aviso: Formato era áudio, mas Base64 chegou vazio.")
-			sendTextMessage(reqCtx, b, rawMsg.ChatID, "Poderia repetir de alguma outra forma?", bot_models.ParseModeHTML)
+			sendTextMessage(reqCtx, b, rawMsg.ChatID, "Poderia repetir de alguma outra forma?", models.ParseModeHTML)
 		}
 	}
 
@@ -258,7 +256,7 @@ func isTextAnswer(ctx context.Context, input string, client openrouter.IClient) 
 		{Role: "user", Content: input},
 	}
 	chat := types.ChatCompletionRequest{
-		Model:      models.TEXT,
+		Model:      "google/gemini-2.5-flash-lite",
 		Messages:   messages,
 		Modalities: []string{"text"},
 	}

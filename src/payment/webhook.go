@@ -9,6 +9,7 @@ import (
 
 	"curso/src/config"
 	"curso/src/database"
+	"curso/src/payment/assinatura"
 
 	"github.com/go-telegram/bot" // Import necessário para o tipo *bot.Bot
 	"github.com/go-telegram/bot/models"
@@ -53,12 +54,12 @@ func HandleWebhook(cfg *config.Config, b *bot.Bot) http.HandlerFunc {
 			priceID := session.Metadata["price_id"]
 
 			days := 0
-			switch Plan(priceID) {
-			case PlanBasicMonthly, PlanProMonthly:
+			switch assinatura.Plan(priceID) {
+			case assinatura.PlanBasicMonthly, assinatura.PlanProMonthly:
 				days = 31
-			case PlanBasicSemiannual, PlanProSemiannual:
+			case assinatura.PlanBasicSemiannual, assinatura.PlanProSemiannual:
 				days = 183
-			case PlanBasicAnnual, PlanProAnnual:
+			case assinatura.PlanBasicAnnual, assinatura.PlanProAnnual:
 				days = 366
 			}
 

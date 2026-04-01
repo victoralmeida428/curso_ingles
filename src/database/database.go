@@ -1,6 +1,7 @@
 package database
 
 import (
+	"curso/src/payment/assinatura"
 	"database/sql"
 	"fmt"
 	"log"
@@ -20,6 +21,7 @@ type UserData struct {
 	DailyAudioCount int   // Novo: Contador de áudios hoje
 	LastAudioReset  int64 // Novo: Timestamp do último reset (meia-noite)
 	PriceID         string
+	TrialUsed       bool
 }
 
 func (u *UserData) IsSubscribed() bool {
@@ -52,14 +54,15 @@ func GetDB(dbPath string) (*sql.DB, error) {
 			expires_at INTEGER DEFAULT 0,
 			daily_audio_count INTEGER DEFAULT 0,
 			last_audio_reset INTEGER DEFAULT 0,
-			price_id TEXT DEFAULT ''
+			price_id TEXT DEFAULT '',
+			trial_used INTEGER DEFAULT 0
 		);`
 
 		if _, err := db.Exec(query); err != nil {
 			dbErr = fmt.Errorf("erro ao criar tabela: %w", err)
 			return
 		}
-		_ =  migrate(db)
+		_ = migrate(db)
 	})
 
 	// Retorna a instância global que foi (ou já havia sido) configurada pelo once.Do
@@ -67,18 +70,19 @@ func GetDB(dbPath string) (*sql.DB, error) {
 }
 
 func migrate(db *sql.DB) error {
-    // Lista de colunas que você adicionou recentemente
-    columns := []string{
-        "ALTER TABLE users ADD COLUMN daily_audio_count INTEGER DEFAULT 0",
-        "ALTER TABLE users ADD COLUMN last_audio_reset INTEGER DEFAULT 0",
-        "ALTER TABLE users ADD COLUMN price_id TEXT DEFAULT ''",
-    }
+	// Lista de colunas que você adicionou recentemente
+	columns := []string{
+		"ALTER TABLE users ADD COLUMN daily_audio_count INTEGER DEFAULT 0",
+		"ALTER TABLE users ADD COLUMN last_audio_reset INTEGER DEFAULT 0",
+		"ALTER TABLE users ADD COLUMN price_id TEXT DEFAULT ''",
+		"ALTER TABLE users ADD COLUMN trial_used INTEGER DEFAULT 0",
+	}
 
-    for _, query := range columns {
-        // O SQLite vai dar erro se a coluna já existir, por isso ignoramos o erro aqui
-        _, _ = db.Exec(query)
-    }
-    return nil
+	for _, query := range columns {
+		// O SQLite vai dar erro se a coluna já existir, por isso ignoramos o erro aqui
+		_, _ = db.Exec(query)
+	}
+	return nil
 }
 
 func IncrementAudioUsage(chatID int64) error {
@@ -110,19 +114,38 @@ func SaveUser(user UserData) error {
 }
 
 // UpdateSubscription prolonga o acesso do usuário
-func UpdateSubscription(chatID int64, days int, priceID string) error {
-	// Calcula a nova data: se já for VIP, soma ao tempo restante; se não, soma a partir de agora
+func UpdateSubscription(chatID int64, days int, stripePriceID string) error {
 	user := GetUser(chatID)
 	var newExpiration int64
 	now := time.Now().Unix()
 
-	if user.ExpiresAt > now {
-		newExpiration = user.ExpiresAt + int64(days*24*60*60)
-	} else {
-		newExpiration = now + int64(days*24*60*60)
+	// 1. Tradução do ID do Stripe para Categoria Interna
+	planCategory := "BASIC"
+	// Use as constantes do seu pacote payment
+	if stripePriceID == string(assinatura.PlanProMonthly) ||
+		stripePriceID == string(assinatura.PlanProAnnual) {
+		planCategory = "PRO"
 	}
 
-	_, err := db.Exec("UPDATE users SET expires_at = ?, price_id = ? WHERE id = ?", newExpiration, chatID)
+	// 2. Lógica de dias (Soma trial se nunca usou)
+	extraDays := 0
+	trialUsedNow := 0
+	if !user.TrialUsed { // Você precisará adicionar TrialUsed bool na struct UserData
+		extraDays = 3
+		trialUsedNow = 1
+	}
+
+	totalSeconds := int64((days + extraDays) * 24 * 60 * 60)
+
+	if user.ExpiresAt > now {
+		newExpiration = user.ExpiresAt + totalSeconds
+	} else {
+		newExpiration = now + totalSeconds
+	}
+
+	// 3. Update final
+	query := `UPDATE users SET expires_at = ?, price_id = ?, trial_used = MAX(trial_used, ?) WHERE id = ?`
+	_, err := db.Exec(query, newExpiration, planCategory, trialUsedNow, chatID)
 	return err
 }
 
@@ -130,7 +153,7 @@ func UpdateSubscription(chatID int64, days int, priceID string) error {
 // Se o usuário não existir, ele é criado automaticamente no banco com valores padrão.
 func GetUser(id int64) UserData {
 	user := UserData{ID: id}
-	query := `SELECT lang, tipo, nivel, expires_at, daily_audio_count, last_audio_reset, price_id FROM users WHERE id = ?`
+	query := `SELECT lang, tipo, nivel, expires_at, daily_audio_count, last_audio_reset, price_id, trial_used FROM users WHERE id = ?`
 
 	err := db.QueryRow(query, id).Scan(
 		&user.Lang,
@@ -140,6 +163,7 @@ func GetUser(id int64) UserData {
 		&user.DailyAudioCount,
 		&user.LastAudioReset,
 		&user.PriceID,
+		&user.TrialUsed,
 	)
 
 	// Se não encontrar o usuário (banco vazio para este ID)

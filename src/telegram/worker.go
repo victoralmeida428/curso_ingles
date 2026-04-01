@@ -15,6 +15,7 @@ import (
 	"curso/src/database"
 	"curso/src/openrouter"
 	"curso/src/payment"
+	"curso/src/payment/assinatura"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -75,7 +76,9 @@ func (w *Worker) StartWorker() {
 func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, client openrouter.IClient, cache *HistoryCache) {
 	isText := update.Message != nil && update.Message.Text != ""
 	isVoice := update.Message != nil && update.Message.Voice != nil
-	if !isText && !isVoice {
+	isAudio := update.Message != nil && update.Message.Audio != nil
+
+	if !isText && !isVoice && !isAudio {
 		return
 	}
 
@@ -120,9 +123,28 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 		case strings.HasPrefix(msgText, "/assinar"):
 			cfg := config.LoadConfig()
 
-			// Links para os novos produtos (Certifique-se de atualizar os IDs no seu .env ou config)
-			linkBasic, _ := payment.CreateCheckoutSession(chatID, string(payment.PlanBasicMonthly), cfg) // Mapeado para o de R$ 10
-			linkPro, _ := payment.CreateCheckoutSession(chatID, string(payment.PlanProMonthly), cfg)     // Reaproveite um ID ou crie um novo para R$ 60
+			// LÓGICA INTELIGENTE: Verifica o status atual da assinatura do usuário
+			if user.IsSubscribed() {
+				switch user.PriceID {
+				case "PRO":
+					rawMsg.Text = "✅ <b>Você já possui o Plano Pro ativo!</b>\n\nSeu acesso total está liberado. Não é necessário assinar novamente."
+					sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
+					return
+				case "BASIC":
+					// Oferece apenas o Upgrade para o PRO
+					linkPro, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanProMonthly), cfg)
+					rawMsg.Text = fmt.Sprintf(
+						"✅ <b>Você possui o Plano Basic ativo!</b>\n\nDeseja fazer um <b>Upgrade para o Plano Pro</b> e liberar a conversação real por voz (30 áudios/dia)?\n\n<a href='%s'>👉 Fazer Upgrade para o Pro</a>",
+						linkPro,
+					)
+					sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
+					return
+				}
+			}
+
+			// Se não for inscrito ou não tiver plano definido, mostra as duas opções
+			linkBasic, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanBasicMonthly), cfg) // Mapeado para o de R$ 10
+			linkPro, _ := payment.CreateCheckoutSession(chatID, string(assinatura.PlanProMonthly), cfg)     // Mapeado para o de R$ 60
 
 			rawMsg.Text = fmt.Sprintf(
 				"💎 <b>Escolha o seu plano Zellang:</b>\n\n"+
@@ -152,13 +174,20 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
 
-		case msgText == "/perfil":
-			// Aqui você pode adicionar a lógica de mostrar qual o plano do user
-			usoAudio := fmt.Sprintf("%d/30", user.DailyAudioCount)
-			rawMsg.Text = fmt.Sprintf("👤 <b>Seu Perfil:</b>\nIdioma: %s\nNível: %s\n\n🎙 <b>Uso de Voz hoje:</b> %s",
-				fallback(user.Lang), fallback(user.Nivel), usoAudio)
+		case strings.HasPrefix(msgText, "/tipo "):
+			user.Tipo = strings.TrimPrefix(msgText, "/tipo ")
+			_ = database.SaveUser(user)
+			rawMsg.Text = fmt.Sprintf("✅ Tipo definido para: %s", user.Tipo)
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
+
+		case msgText == "/perfil":
+			usoAudio := fmt.Sprintf("%d/30", user.DailyAudioCount)
+			rawMsg.Text = fmt.Sprintf("👤 <b>Seu Perfil:</b>\nPlano Atual: <b>%s</b>\nIdioma: %s\nNível: %s\n\n🎙 <b>Uso de Voz hoje:</b> %s",
+				fallback(user.PriceID), fallback(user.Lang), fallback(user.Nivel), usoAudio)
+			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
+			return
+
 		case msgText == "/creditos":
 			credits, err := client.GetCredits(ctx)
 			if err != nil {
@@ -174,13 +203,22 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 			rawMsg.Text = msgText
 			_ = processIncomingMessage(ctx, rawMsg, client, user, b, cache)
 		}
-	} else if isVoice {
-		if user.PriceID != string(payment.PlanProMonthly) {
+	} else if isVoice || isAudio {
+		// CORREÇÃO DA TRAVA: Agora verifica a string "PRO"
+		if user.PriceID != "PRO" {
 			msgBlock := "🎙️ <b>Recurso Premium</b>\n\nO envio e recebimento de mensagens de voz é exclusivo do <b>Plano Pro</b>.\n\nUse /assinar para fazer o upgrade e liberar a conversação real!"
 			sendTextMessage(ctx, b, chatID, msgBlock, models.ParseModeHTML)
 			return // Para a execução aqui, não gasta API
 		}
-		rawMsg.Voice = &VoicePayload{FileID: update.Message.Voice.FileID}
+
+		var fID string
+		if isVoice {
+			fID = update.Message.Voice.FileID
+		} else {
+			fID = update.Message.Audio.FileID
+		}
+
+		rawMsg.Voice = &VoicePayload{FileID: fID}
 		_ = processIncomingMessage(ctx, rawMsg, client, user, b, cache)
 	}
 

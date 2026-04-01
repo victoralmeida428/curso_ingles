@@ -15,6 +15,7 @@ func CreateCheckoutSession(chatID int64, priceID string, cfg *config.Config) (st
 		SuccessURL:          stripe.String(cfg.TelegramURL),
 		Mode:                stripe.String(string(stripe.CheckoutSessionModeSubscription)),
 		AllowPromotionCodes: stripe.Bool(true),
+
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
 				Price:    stripe.String(priceID),
