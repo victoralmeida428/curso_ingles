@@ -68,8 +68,9 @@ func HandleWebhook(cfg *config.Config, b *bot.Bot) http.HandlerFunc {
 			}
 
 			log.Printf("⚙️ Atualizando assinatura: ChatID %d por %d dias", chatID, days)
+			subscriptionID := session.Subscription.ID
 			if days > 0 && chatID != 0 {
-				errDb := database.UpdateSubscription(chatID, days, priceID)
+				errDb := database.UpdateSubscription(chatID, days, priceID, subscriptionID)
 
 				if errDb == nil {
 					// ENVIA NOTIFICAÇÃO DE SUCESSO PARA O USUÁRIO NO TELEGRAM

@@ -126,7 +126,7 @@ func IncrementFreeUse(chatID int64) error {
 }
 
 // UpdateSubscription prolonga o acesso do usuário
-func UpdateSubscription(chatID int64, days int, stripePriceID string) error {
+func UpdateSubscription(chatID int64, days int, stripePriceID string, subscriptionID string) error {
 	user := GetUser(chatID)
 	var newExpiration int64
 	now := time.Now().Unix()
@@ -156,8 +156,8 @@ func UpdateSubscription(chatID int64, days int, stripePriceID string) error {
 	}
 
 	// 3. Update final
-	query := `UPDATE users SET expires_at = ?, price_id = ?, trial_used = MAX(trial_used, ?) WHERE id = ?`
-	_, err := db.Exec(query, newExpiration, planCategory, trialUsedNow, chatID)
+	query := `UPDATE users SET expires_at = ?, price_id = ?, trial_used = MAX(trial_used, ?), stripe_subscription_id = ? WHERE id = ?`
+	_, err := db.Exec(query, newExpiration, planCategory, trialUsedNow, subscriptionID, chatID)
 	return err
 }
 
