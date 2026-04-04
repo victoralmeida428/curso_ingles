@@ -65,6 +65,7 @@ func (w *Worker) StartWorker() {
 		{Command: "tipo", Description: "Define o vocabulário"},
 		{Command: "nivel", Description: "Define seu nível atual"},
 		{Command: "assinar", Description: "Destrave o acesso ilimitado"},
+		{Command: "cancelar", Description: "Cancela sua assinatura"},
 	}
 
 	if _, err := w.bot.SetMyCommands(ctx, &bot.SetMyCommandsParams{Commands: comandos}); err != nil {
@@ -170,7 +171,6 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
 
-		// ... (comandos de lang, nivel, tipo mantidos)
 		case strings.HasPrefix(msgText, "/lang "):
 			user.Lang = strings.TrimPrefix(msgText, "/lang ")
 			_ = database.SaveUser(user)
@@ -219,15 +219,35 @@ func processMessage(ctx context.Context, b *bot.Bot, update *models.Update, clie
 				promptOculto = "Olá! Quero treinar vocabulário de viagem e aeroporto. Pode iniciar um roleplay (simulação) comigo como se eu estivesse viajando?"
 			}
 
-			// Salva a escolha no banco de dados para a IA lembrar depois
 			user.Tipo = novoTipo
 			_ = database.SaveUser(user)
 
-			// Engana a IA: substitui o número isolado por um texto rico e explicativo
 			rawMsg.Text = promptOculto
 
 			// Manda para a IA processar a mensagem "oculta"
 			_ = processIncomingMessage(ctx, rawMsg, client, user, b, cache)
+			return
+		
+		case strings.HasPrefix(msgText, "/cancelar"):
+			cfg := config.LoadConfig()
+
+			if !user.IsSubscribed() {
+				rawMsg.Text = "❌ <b>Você não tem assinatura ativa.</b>"
+				sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
+				return
+			}
+
+			// Gera o link de gerenciamento (Customer Portal)
+			_, err := payment.CancelarAssinatura(user.StripeSubscriptionID, cfg)
+			if err != nil {
+				log.Printf("Erro ao criar portal: %v", err)
+				rawMsg.Text = "❌ Erro ao gerar link de cancelamento. Tente novamente mais tarde."
+				sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
+				return
+			}
+
+			rawMsg.Text = "🛑 <b>Assinatura cancelada com sucesso!</b>\n\nSe preferir, pode me mandar uma mensagem quando quiser voltar."
+			sendTextMessage(ctx, b, chatID, rawMsg.Text, models.ParseModeHTML)
 			return
 
 		default:

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stripe/stripe-go/v85"
 	"github.com/stripe/stripe-go/v85/checkout/session"
+	"github.com/stripe/stripe-go/v85/subscription"
 )
 
 // CreateCheckoutSession agora recebe 'elegivelTrial' para decidir se aplica os 3 dias grátis
@@ -40,5 +41,21 @@ func CreateCheckoutSession(chatID int64, priceID string, cfg *config.Config, ele
 	if err != nil {
 		return "", err
 	}
+
 	return s.URL, nil
+}
+
+// CancelarAssinatura cancela a assinatura do usuário
+func CancelarAssinatura(subscriptionID string, cfg *config.Config) (*stripe.Subscription, error) {
+	stripe.Key = cfg.StripeSecretKey
+	params := &stripe.SubscriptionParams{
+		CancelAtPeriodEnd: stripe.Bool(true),
+	}
+
+	result, err := subscription.Update(subscriptionID, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }

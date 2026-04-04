@@ -23,6 +23,7 @@ type UserData struct {
 	PriceID         string
 	TrialUsed       bool
 	FreeUsed        int
+	StripeSubscriptionID string
 }
 
 func (u *UserData) IsSubscribed() bool {
@@ -57,7 +58,8 @@ func GetDB(dbPath string) (*sql.DB, error) {
 			last_audio_reset INTEGER DEFAULT 0,
 			price_id TEXT DEFAULT '',
 			trial_used INTEGER DEFAULT 0,
-			free_used INTEGER DEFAULT 0
+			free_used INTEGER DEFAULT 0,
+			stripe_subscription_id TEXT DEFAULT ''
 		);`
 
 		if _, err := db.Exec(query); err != nil {
@@ -79,6 +81,7 @@ func migrate(db *sql.DB) error {
 		"ALTER TABLE users ADD COLUMN price_id TEXT DEFAULT ''",
 		"ALTER TABLE users ADD COLUMN trial_used INTEGER DEFAULT 0",
 		"ALTER TABLE users ADD COLUMN free_used INTEGER DEFAULT 0",
+		"ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT DEFAULT ''",
 	}
 
 	for _, query := range columns {
@@ -162,7 +165,17 @@ func UpdateSubscription(chatID int64, days int, stripePriceID string) error {
 // Se o usuário não existir, ele é criado automaticamente no banco com valores padrão.
 func GetUser(id int64) UserData {
 	user := UserData{ID: id}
-	query := `SELECT lang, tipo, nivel, expires_at, daily_audio_count, last_audio_reset, price_id, trial_used, free_used FROM users WHERE id = ?`
+	query := `SELECT lang, 
+	tipo, 
+	nivel, 
+	expires_at,
+	daily_audio_count,
+	last_audio_reset,
+	price_id,
+	trial_used,
+	free_used,
+	stripe_subscription_id 
+	FROM users WHERE id = ?`
 
 	err := db.QueryRow(query, id).Scan(
 		&user.Lang,
@@ -174,6 +187,7 @@ func GetUser(id int64) UserData {
 		&user.PriceID,
 		&user.TrialUsed,
 		&user.FreeUsed,
+		&user.StripeSubscriptionID,
 	)
 
 	// Se não encontrar o usuário (banco vazio para este ID)

@@ -8,4 +8,4 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.37
 )
 
-require github.com/stripe/stripe-go/v85 v85.0.0 // indirect
+require github.com/stripe/stripe-go/v85 v85.0.0
